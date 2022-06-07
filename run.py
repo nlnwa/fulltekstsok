@@ -35,7 +35,7 @@ def run_in_docker(job):
     crawl_id = str(job[0])
     file_path = job[1]
     # run docker container
-    docker_command = ['docker', 'run', '--rm', '--network=lan', '-v', '{input_folder}:{input_folder}'.format(input_folder=input_folder), '-it', 'langdet:test8', "python3", "process-warc-html.py", file_path, crawl_id]
+    docker_command = ['docker', 'run', '--rm', '--network=lan', '-v', '{input_folder}:{input_folder}'.format(input_folder=input_folder), '-it', 'langdet', "python3", "process-warc-html.py", file_path, crawl_id]
     subprocess.run(docker_command)
 
 jobs = []
