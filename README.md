@@ -14,8 +14,8 @@ docker network create lan
 docker network inspect lan
 ```
 
-## check/copy subnet
-## example: 172.19.0.0/16
+-- check/copy subnet
+-- example: 172.19.0.0/16
 
 ## restrict network access to server (example: 128.39.111.15)
 
@@ -38,4 +38,12 @@ host    all             all             172.19.0.0/16           trust
 sudo systemctl restart postgresql
 ```
 
+## build Docker image
+```bash
+docker build -t langdet .
+```
+
 ## run!
+```bash
+python3 run.py
+```
