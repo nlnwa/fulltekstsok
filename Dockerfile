@@ -16,6 +16,9 @@ COPY models/stoplists_justext/* /usr/local/lib/python3.8/dist-packages/justext/s
 COPY config_docker.py config.py
 COPY process-warc-html.py .
 
+# copy crawl info
+COPY k8s/crawls jobs/
+
 # create user
 RUN useradd -ms /bin/bash langdet
 USER langdet
