@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: process-nlwa-html-01
+spec:
+  template:
+    metadata:
+      labels:
+        app: process-nlwa-html-01
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: main-01
+        image: registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
+        command: ["python3", "process-warc-html.py", "jobs/x01.csv"]
+        envFrom:
+          - configMapRef:
+              name: sprakbank-postgres-config
+        env:
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: sprakbank-postgres-secret
+                key: POSTGRES_PASSWORD
+          - name: POSTGRES_HOST
+            value: "sprakbank-postgres"
+          - name: POSTGRES_PORT
+            value: "5432"
+        volumeMounts:
+          - name: sprakbank-fs00
+            mountPath: /mnt/data
+      volumes:
+        - name: sprakbank-fs00
+          persistentVolumeClaim:
+            claimName: sprakbank-fs00-ro-pvc
+      nodeSelector:
+        kubernetes.io/hostname: nbd1k8s7.lx.nb.no
+      tolerations:
+        - key: "node.kubernetes.io/unschedulable"
+          operator: "Exists"
+          effect: "NoSchedule"
