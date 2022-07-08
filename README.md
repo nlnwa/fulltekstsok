@@ -25,12 +25,6 @@ kubectl apply -f k8s/postgres_service.yaml
 cat db/schema.sql | k exec -i sprakbank-postgres-POD -- psql -U admin -d nlwa_index
 ```
 
-## build docker image for WARC processing
-```bash
-docker build -t registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
-docker push registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
-```
-
 ## build helper for accessing deduppen1
 ```bash
 cd k8s
@@ -61,6 +55,13 @@ for i in `seq -f "%02g" 1 10`
 do
   cat job-template.yaml | sed "s/01/$i/" > jobs/job-$i.yaml
 done
+```
+
+## build docker image for WARC processing
+```bash
+cd ..
+docker build -t registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
+docker push registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
 ```
 
 ## start processing
