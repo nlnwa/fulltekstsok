@@ -8,6 +8,7 @@ import hashlib
 import sys
 import cchardet
 import lxml
+import csv
 
 # Justext options (magbb)
 MAX_LINK_DENSITY = 0.4
@@ -65,17 +66,10 @@ def removeBP(utf_stream, stop_words):
     else:
         return ['']
 
-stopwords = get_all_stop_words()
-
-file = sys.argv[1]
-crawl_id = int(sys.argv[2])
-
-with pg.connect(user=c.user, password=c.password, database=c.database, host=c.host, port=c.port) as con:
+def extract_content(file, con):
     cur = con.cursor()
 
-    if file.endswith('warc.gz') and not file.endswith('meta.warc.gz'):
-        print(file)
-
+    try:
         with open(file, 'rb') as stream:
             # write warc file record, if existent return
 
@@ -90,59 +84,84 @@ with pg.connect(user=c.user, password=c.password, database=c.database, host=c.ho
             warc_file_id = cur.fetchone()[0]
 
             for record in ArchiveIterator(stream):
-                # filter only status_code 200 HTML responses
-                if record.rec_type == 'response':
-                    mime = record.http_headers.get('Content-Type')
+                try:
+                    # filter only status_code 200 HTML responses
+                    if record.rec_type == 'response':
+                        try:
+                            mime = record.http_headers.get('Content-Type')
+                        except:
+                            continue
 
-                    if mime:
-                        if mime.startswith('text/html'):
-                            statusline = record.http_headers.statusline
-                            if statusline:
-                                if statusline.startswith('200'):
-                                    loc = record.http_headers.get('Location')
+                        if mime:
+                            if mime.startswith('text/html'):
+                                statusline = record.http_headers.statusline
+                                if statusline:
+                                    if statusline.startswith('200'):
+                                        loc = record.http_headers.get('Location')
 
-                                    # we create a hash of the content stream for deduplication (see the problem in: https://github.com/webrecorder/warcio/issues/74)
-                                    try:
-                                        content_stream = record.content_stream().read()
-                                    except:
-                                        print("problem reading content stream... skipping", record.rec_headers.get('WARC-Record-ID'))
-                                        continue
-                                    content_hash = hashlib.sha1(content_stream).hexdigest()
+                                        # we create a hash of the content stream for deduplication (see the problem in: https://github.com/webrecorder/warcio/issues/74)
+                                        try:
+                                            content_stream = record.content_stream().read()
+                                        except:
+                                            print("problem reading content stream... skipping", record.rec_headers.get('WARC-Record-ID'))
+                                            continue
+                                        content_hash = hashlib.sha1(content_stream).hexdigest()
 
-                                    try:
-                                        # decode and remove boilerplate
-                                        utf_stream = convert_encoding(content_stream)
-                                        html_content = removeBP(utf_stream, stopwords)
-                                    except:
-                                        print("problem loading HTML... skipping", record.rec_headers.get('WARC-Record-ID'))
-                                        continue
+                                        try:
+                                            # decode and remove boilerplate
+                                            utf_stream = convert_encoding(content_stream)
+                                            html_content = removeBP(utf_stream, stopwords)
+                                        except:
+                                            print("problem loading HTML... skipping", record.rec_headers.get('WARC-Record-ID'))
+                                            continue
 
-                                    para = "\n".join(html_content)
-                                    hashStr=hashlib.sha1(para.encode('utf-8')).hexdigest()
+                                        para = "\n".join(html_content)
+                                        hashStr=hashlib.sha1(para.encode('utf-8')).hexdigest()
 
-                                    fulltext_sql = """INSERT INTO fulltext(crawl_id, html, html_hash, fulltext, fulltext_hash) VALUES(%s,%s,%s,%s,%s)  RETURNING fulltext_id;"""
-                                    cur.execute(fulltext_sql, (crawl_id, utf_stream, content_hash, para, hashStr))
-                                    fulltext_id = cur.fetchone()
+                                        fulltext_sql = """INSERT INTO fulltext(fulltext_hash, crawl_id, fulltext) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING;"""
+                                        cur.execute(fulltext_sql, (hashStr, crawl_id, para))
 
-                                    # INSERT WARCINFO
-                                    warcinfo_sql = """INSERT INTO warcinfo(record_id, crawl_id, type, concurrent_to, target_uri, date, content_hash, payload_digest, content_type, content_length, response_mime_type, response_status, redirect_location, warc_file_id, fulltext_id)
-                                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);"""
-                                    cur.execute(warcinfo_sql, (record.rec_headers.get('WARC-Record-ID'), crawl_id, record.rec_headers.get('WARC-Type'), record.rec_headers.get('WARC-Concurrent-To'), record.rec_headers.get('WARC-Target-URI'), record.rec_headers.get('WARC-Date'), content_hash, record.rec_headers.get('WARC-Payload-Digest'), record.rec_headers.get('Content-Type'), record.rec_headers.get('Content-Length'), mime, statusline, loc, warc_file_id, fulltext_id))
-                elif record.rec_type == 'revisit':
-                    try:
-                        mime = record.http_headers.get('Content-Type')
-                    except:
-                        continue
-                    if mime:
-                        if mime.startswith('text/html'):
-                            statusline = record.http_headers.statusline
-                            if statusline:
-                                if statusline.startswith('200'):
-                                    loc = record.http_headers.get('Location')
+                                        # INSERT WARCINFO
+                                        warcinfo_sql = """INSERT INTO warcinfo(record_id, crawl_id, type, concurrent_to, target_uri, date, content_hash, payload_digest, content_type, content_length, response_mime_type, response_status, redirect_location, warc_file_id, fulltext_hash)
+                                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);"""
+                                        cur.execute(warcinfo_sql, (record.rec_headers.get('WARC-Record-ID'), crawl_id, record.rec_headers.get('WARC-Type'), record.rec_headers.get('WARC-Concurrent-To'), record.rec_headers.get('WARC-Target-URI'), record.rec_headers.get('WARC-Date'), content_hash, record.rec_headers.get('WARC-Payload-Digest'), record.rec_headers.get('Content-Type'), record.rec_headers.get('Content-Length'), mime, statusline, loc, warc_file_id, hashStr))
+                    elif record.rec_type == 'revisit':
+                        try:
+                            mime = record.http_headers.get('Content-Type')
+                        except:
+                            continue
+                        if mime:
+                            if mime.startswith('text/html'):
+                                statusline = record.http_headers.statusline
+                                if statusline:
+                                    if statusline.startswith('200'):
+                                        loc = record.http_headers.get('Location')
 
-                                    # INSERT WARCINFO
-                                    warcinfo_sql = """INSERT INTO warcinfo(record_id, crawl_id, type, concurrent_to, refers_to, target_uri, date, payload_digest, content_type, content_length, response_mime_type, response_status, redirect_location, warc_file_id)
-                                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);"""
-                                    cur.execute(warcinfo_sql, (record.rec_headers.get('WARC-Record-ID'), crawl_id, record.rec_headers.get('WARC-Type'), record.rec_headers.get('WARC-Concurrent-To'), record.rec_headers.get('WARC-Refers-To'), record.rec_headers.get('WARC-Target-URI'), record.rec_headers.get('WARC-Date'), record.rec_headers.get('WARC-Payload-Digest'), record.rec_headers.get('Content-Type'), record.rec_headers.get('Content-Length'), mime, statusline, loc, warc_file_id))
+                                        # INSERT WARCINFO
+                                        warcinfo_sql = """INSERT INTO warcinfo(record_id, crawl_id, type, concurrent_to, refers_to, target_uri, date, payload_digest, content_type, content_length, response_mime_type, response_status, redirect_location, warc_file_id)
+                                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);"""
+                                        cur.execute(warcinfo_sql, (record.rec_headers.get('WARC-Record-ID'), crawl_id, record.rec_headers.get('WARC-Type'), record.rec_headers.get('WARC-Concurrent-To'), record.rec_headers.get('WARC-Refers-To'), record.rec_headers.get('WARC-Target-URI'), record.rec_headers.get('WARC-Date'), record.rec_headers.get('WARC-Payload-Digest'), record.rec_headers.get('Content-Type'), record.rec_headers.get('Content-Length'), mime, statusline, loc, warc_file_id))
 
-                    con.commit()
+                        con.commit()
+                except:
+                    print("Error in WARC record", file)
+                    continue
+    except:
+        print("General error or error opening file:", file)
+
+stopwords = get_all_stop_words()
+
+input_file = sys.argv[1]
+
+with open(input_file, 'r') as f:
+    csvreader = csv.reader(f)
+
+    for row in csvreader:
+        crawl_id = int(row[0])
+        file = row[2]
+
+        with pg.connect(user=c.user, password=c.password, database=c.database, host=c.host, port=c.port) as con:
+
+            if file.endswith('warc.gz') and not file.endswith('meta.warc.gz'):
+                print(file)
+                extract_content(file, con)
