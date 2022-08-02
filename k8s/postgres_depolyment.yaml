@@ -32,6 +32,8 @@ spec:
         volumeMounts:
           - name: sprakbank-postgres-vol
             mountPath: /var/lib/postgresql/data
+          - name: dshm
+            mountPath: /dev/shm
       nodeSelector:
         kubernetes.io/hostname: nbd1k8s7.lx.nb.no
       tolerations:
@@ -42,3 +44,8 @@ spec:
         - name: sprakbank-postgres-vol
           persistentVolumeClaim:
             claimName: sprakbank-gpu1-pvc
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+
