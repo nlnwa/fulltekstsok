@@ -1,3 +1,4 @@
+__pycache__/*
 config.py
 config_docker.py
 k8s/jobs
