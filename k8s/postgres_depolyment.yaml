@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: postgres
-        image: postgres:12.5-alpine
+        image: postgres:14.4-alpine
         envFrom:
           - configMapRef:
                 name: sprakbank-postgres-config
