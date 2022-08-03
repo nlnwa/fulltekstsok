@@ -11,7 +11,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: main-01
-        image: registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
+        image: registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-12-1
         command: ["python3", "process-warc-html.py", "jobs/x01.csv"]
         envFrom:
           - configMapRef:
