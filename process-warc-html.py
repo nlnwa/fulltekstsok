@@ -160,8 +160,11 @@ with open(input_file, 'r') as f:
         crawl_id = int(row[0])
         file = row[2]
 
-        with pg.connect(user=c.user, password=c.password, database=c.database, host=c.host, port=c.port) as con:
+        try:
+            with pg.connect(user=c.user, password=c.password, database=c.database, host=c.host, port=c.port) as con:
 
-            if file.endswith('warc.gz') and not file.endswith('meta.warc.gz'):
-                print(file)
-                extract_content(file, con)
+                if file.endswith('warc.gz') and not file.endswith('meta.warc.gz'):
+                    print(file)
+                    extract_content(file, con)
+        except:
+            continue
