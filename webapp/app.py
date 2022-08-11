@@ -41,7 +41,7 @@ def get_docs_websearch(query="'Aslak Sira Myhre'", limit=10, window=25, samplesi
 
         nr_docs = cur.fetchone()[0]
 
-        if nr_docs > limit: 
+        if nr_docs > (limit * 10): 
             cur.execute("""CREATE TEMP TABLE query_results_limit AS
                 SELECT * FROM query_results q
                 TABLESAMPLE BERNOULLI (%s)
