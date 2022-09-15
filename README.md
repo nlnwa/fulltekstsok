@@ -46,14 +46,14 @@ cat crawls.csv | k exec -i nlwa-index-helper -- python3 create_partitions.py
 ## create batches (10) for the files
 ```bash
 mkdir crawls && cp crawls.csv crawls && cd crawls
-split crawls.csv -d -n l/10 --numeric-suffixes=1 --additional-suffix=.csv
+split -d -n l/10 --numeric-suffixes=1 --additional-suffix=.csv files_left.csv x-
 ```
 
 ## create jobs based on template in jobs/
 ```bash
 for i in `seq -f "%02g" 1 10`
 do
-  cat job-template.yaml | sed "s/01/$i/" > jobs/job-$i.yaml
+  cat job-template.yaml | sed "s/-01/-$i/" > jobs/job-$i.yaml
 done
 ```
 
