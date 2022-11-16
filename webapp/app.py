@@ -15,8 +15,8 @@ def create_link(link, link_text):
 def create_link_html(link, link_text):
     return f"<a href=\"{link}\">{link_text}</a>"
 
-def get_docs_websearch(query="'Aslak Sira Myhre'", limit=10, window=25, samplesize=10):
-    with pg.connect(user=c.user, password=c.password, database=c.database, host=c.host, port=c.port) as con:
+def get_docs_websearch(query="'Aslak Sira Myhre'", limit=10, window=25, samplesize=10, database="nlwa_index"):
+    with pg.connect(user=c.user, password=c.password, database=database, host=c.host, port=c.port) as con:
         cur = con.cursor()
 
         # set parallel params
@@ -89,6 +89,13 @@ st.title('Fulltekstsøk i NB Nettarkivet')
 st.write("Oppgi et søkeord eller søkeuttrykk. Søk på samme måte som i Google. Det søkes i nettsider høstet etter 2019. Duplikater vil kunne forekomme og ikke alle søkeresultater vil være like relevante.")
 
 query = st.text_input("Søk", "\"Nasjonal bibliotekstrategi\"")
+corpus = st.sidebar.selectbox('Choose corpus', ('Veidemann (2019-)', 'Heritrix (2005-2014)'))
+
+if corpus == "Heritrix (2005-2014)":
+    database = "nlwa_index_heritrix"
+else:
+    database = "nlwa_index"
+
 samplesize = st.sidebar.number_input('Sample-størrelse (i %)', value=10)
 limit = st.sidebar.number_input('Maksimalt antall treff fra sample som vises', value=10)
 window = st.sidebar.number_input('Antall ord per treff (snippet)', value=25, max_value=50, min_value=6)
@@ -97,11 +104,11 @@ debug = st.sidebar.checkbox("Debug", value=False)
 if window > 50:
     window = 50
 
-nr_docs, nr_showing, circa_nr, results = get_docs_websearch(query=query, limit=limit, window=window, samplesize=samplesize)
+nr_docs, nr_showing, circa_nr, results = get_docs_websearch(query=query, limit=limit, window=window, samplesize=samplesize, database=database)
 
 if nr_docs > nr_showing:
     if st.button("Vis flere dokumenter"):
-        nr_docs, nr_showing, circa_nr, results = get_docs_websearch(query=query, limit=limit, window=window, samplesize=samplesize)
+        nr_docs, nr_showing, circa_nr, results = get_docs_websearch(query=query, limit=limit, window=window, samplesize=samplesize, database=database)
 
 print_results(nr_docs, nr_showing, circa_nr, results, debug)
 
