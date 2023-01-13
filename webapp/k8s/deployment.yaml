@@ -5,7 +5,7 @@ metadata:
   labels:
     app: nlwa-webapp
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: nlwa-webapp
@@ -16,7 +16,9 @@ spec:
     spec:
       containers:
       - name: nlwa-webapp
-        image: registry.nb.no:5000/sprakbanken/nlwa-webapp:2022-08-09-1
+        image: registry.nb.no:5000/sprakbanken/nlwa-webapp:2022-09-29-2
+        command: [ "/bin/bash" ]
+        args: [ "-c", "streamlit run app.py --server.port 8501 --server.baseUrlPath /nlnwa_index"]
         envFrom:
           - configMapRef:
                 name: sprakbank-postgres-config
