@@ -13,6 +13,8 @@ CREATE TABLE warcinfo(record_id text, crawl_id INT, type text, concurrent_to tex
 ALTER TABLE warcinfo ADD CONSTRAINT warcinfo_record_id_crawl_id PRIMARY KEY(record_id,crawl_id);
 ALTER TABLE warcinfo ADD CONSTRAINT warcinfo_fulltext_hash_craw_id FOREIGN KEY(fulltext_hash,crawl_id) REFERENCES fulltext(fulltext_hash,crawl_id);
 
+CREATE TABLE links (record_id text, crawl_id INT, outlink text, anchor text)PARTITION BY LIST(crawl_id);
+
 --CREATE TABLE warc_domain(warc_domain_id SERIAL PRIMARY KEY, warc_file_id INT REFERENCES warc_files(warc_file_id) ON UPDATE CASCADE ON DELETE CASCADE, domain text, topdomain text);
 --CREATE TABLE doclangs (doclang_id SERIAL PRIMARY KEY, fulltext_id int, crawl_id int, lang text, paralang json, tokens int, paras int);
 --ALTER TABLE doclangs ADD CONSTRAINT doclangs_fulltext_id_craw_id FOREIGN KEY(fulltext_id,crawl_id) REFERENCES fulltext(fulltext_id,crawl_id);
