@@ -82,6 +82,7 @@ def extract_content(file, con):
 
             cur.execute(warcfile_sql, (file,file))
             warc_file_id = cur.fetchone()[0]
+            con.commit()
 
             for record in ArchiveIterator(stream):
                 try:
@@ -105,15 +106,21 @@ def extract_content(file, con):
                                         except:
                                             print("problem reading content stream... skipping", record.rec_headers.get('WARC-Record-ID'))
                                             continue
-                                        content_hash = hashlib.sha1(content_stream).hexdigest()
 
                                         try:
                                             # decode and remove boilerplate
                                             utf_stream = convert_encoding(content_stream)
+
+                                            if len(utf_stream) > 3000000:
+                                                print("very long document... skipping", record.rec_headers.get('WARC-Record-ID'))
+                                                continue
+
                                             html_content = removeBP(utf_stream, stopwords)
                                         except:
                                             print("problem loading HTML... skipping", record.rec_headers.get('WARC-Record-ID'))
                                             continue
+
+                                        content_hash = hashlib.sha1(content_stream).hexdigest()
 
                                         para = "\n".join(html_content)
                                         hashStr=hashlib.sha1(para.encode('utf-8')).hexdigest()
@@ -125,6 +132,7 @@ def extract_content(file, con):
                                         warcinfo_sql = """INSERT INTO warcinfo(record_id, crawl_id, type, concurrent_to, target_uri, date, content_hash, payload_digest, content_type, content_length, response_mime_type, response_status, redirect_location, warc_file_id, fulltext_hash)
                                         VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);"""
                                         cur.execute(warcinfo_sql, (record.rec_headers.get('WARC-Record-ID'), crawl_id, record.rec_headers.get('WARC-Type'), record.rec_headers.get('WARC-Concurrent-To'), record.rec_headers.get('WARC-Target-URI'), record.rec_headers.get('WARC-Date'), content_hash, record.rec_headers.get('WARC-Payload-Digest'), record.rec_headers.get('Content-Type'), record.rec_headers.get('Content-Length'), mime, statusline, loc, warc_file_id, hashStr))
+                                        con.commit()
                     elif record.rec_type == 'revisit':
                         try:
                             mime = record.http_headers.get('Content-Type')
