@@ -5,11 +5,12 @@ metadata:
 spec:
   containers:
     - name: nlwa-index-helper
-      image: registry.nb.no:5000/sprakbanken/nlwa_index_helper:3
-      envFrom:
-        - configMapRef:
-              name: sprakbank-postgres-config
+      image: registry.nb.no:5000/sprakbanken/nlwa_index_helper:2022-09-20-1
       env:
+        - name: POSTGRES_USER
+          value: "admin"
+        - name: POSTGRES_DB
+          value: "nlwa_index_heritrix"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -22,15 +23,9 @@ spec:
       command: [ "/bin/sh" ]
       args: [ "-c", "sleep infinity"]
       volumeMounts:
-        - name: sprakbank-fs00
+        - name: sprakbank-fs01
           mountPath: /mnt/data
-  nodeSelector:
-    kubernetes.io/hostname: nbd1k8s7.lx.nb.no
-  tolerations:
-    - key: "node.kubernetes.io/unschedulable"
-      operator: "Exists"
-      effect: "NoSchedule"
   volumes:
-    - name: sprakbank-fs00
+    - name: sprakbank-fs01
       persistentVolumeClaim:
-        claimName: sprakbank-fs00-ro-pvc
+        claimName: sprakbank-fs01-ro-pvc

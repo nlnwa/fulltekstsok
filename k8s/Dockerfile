@@ -12,6 +12,7 @@ RUN pip install -r requirements.txt
 COPY config_docker.py config.py
 COPY create_partitions.py .
 COPY get_crawls.py .
+COPY get_crawls_heritrix.py .
 
 # create a entrypoint
 RUN ["python3"]

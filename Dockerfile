@@ -12,12 +12,13 @@ RUN pip install -r requirements.txt
 RUN rm /usr/local/lib/python3.8/dist-packages/justext/stoplists/*
 COPY models/stoplists_justext/* /usr/local/lib/python3.8/dist-packages/justext/stoplists/
 
+# copy crawl info
+COPY k8s/crawls_heritrix jobs/
+
 # copy processing scripts
 COPY config_docker.py config.py
 COPY process-warc-html.py .
-
-# copy crawl info
-COPY k8s/crawls jobs/
+COPY extract-links.py . 
 
 # create user
 RUN useradd -ms /bin/bash langdet
