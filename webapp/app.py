@@ -47,7 +47,7 @@ def get_docs_websearch(query="'Aslak Sira Myhre'", limit=10, window=25, samplesi
                 TABLESAMPLE BERNOULLI (%s)
                 LIMIT %s;""", (samplesize, limit,))
 
-            circa_nr = math.floor(nr_docs / samplesize) * 10
+            circa_nr = math.floor(nr_docs / samplesize)
         else:
             cur.execute("""CREATE TEMP TABLE query_results_limit AS
                 SELECT * FROM query_results q;""")
