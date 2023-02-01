@@ -72,7 +72,7 @@ def get_docs_websearch(query="'Aslak Sira Myhre'", limit=10, window=25, samplesi
         return nr_docs, nr_showing, circa_nr, results
 
 def print_results(nr_docs, nr_showing, circa_nr, results, debug):
-    if circa_nr = None:
+    if circa_nr == None:
         st.markdown("Totalt " + str(nr_docs) + " treff (fullstendig), viser " + str(nr_showing))
     elif circa_nr != None:
         st.markdown("Totalt " + str(nr_docs) + " treff (samplet " + str(circa_nr) + " av disse), viser " + str(nr_showing))
