@@ -41,18 +41,18 @@ def get_docs_websearch(query="'Aslak Sira Myhre'", limit=10, window=25, samplesi
 
         nr_docs = cur.fetchone()[0]
 
-        if nr_docs > (limit * 10): 
+        if nr_docs > limit:
             cur.execute("""CREATE TEMP TABLE query_results_limit AS
                 SELECT * FROM query_results q
                 TABLESAMPLE BERNOULLI (%s)
                 LIMIT %s;""", (samplesize, limit,))
 
-            circa_nr = math.floor(nr_docs / 10) * 10
+            circa_nr = math.floor(nr_docs / samplesize) * 10
         else:
             cur.execute("""CREATE TEMP TABLE query_results_limit AS
                 SELECT * FROM query_results q;""")
 
-            circa_nr = nr_docs
+            circa_nr = None
 
         # analyze temp table
         cur.execute("ANALYZE query_results_limit;")
@@ -72,7 +72,10 @@ def get_docs_websearch(query="'Aslak Sira Myhre'", limit=10, window=25, samplesi
         return nr_docs, nr_showing, circa_nr, results
 
 def print_results(nr_docs, nr_showing, circa_nr, results, debug):
-    st.markdown("Omtrent " + str(circa_nr) + " treff, viser " + str(nr_showing))
+    if circa_nr = None:
+        st.markdown("Totalt " + str(nr_docs) + " treff (fullstendig), viser " + str(nr_showing))
+    elif circa_nr != None:
+        st.markdown("Totalt " + str(nr_docs) + " treff (samplet " + str(circa_nr) + " av disse), viser " + str(nr_showing))
     for idx,result in enumerate(results):
         link = create_link(link=result[2], link_text=result[3])
         st.markdown("_" + result[1] + " -- " + link + "_")
