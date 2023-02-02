@@ -1,6 +1,5 @@
 __pycache__/*
 config.py
-config_docker.py
 k8s/jobs
 k8s/crawls
 k8s/crawls.csv
