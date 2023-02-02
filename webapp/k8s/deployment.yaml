@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: nlwa-webapp
-        image: registry.nb.no:5000/sprakbanken/nlwa-webapp:2022-09-29-2
+        image: harbor.nb.no/sprakbanken/nlwa-webapp:2023-02-01-4
         command: [ "/bin/bash" ]
         args: [ "-c", "streamlit run app.py --server.port 8501 --server.baseUrlPath /nlnwa_index"]
         envFrom:

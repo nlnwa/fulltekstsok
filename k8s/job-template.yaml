@@ -1,23 +1,23 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: process-nlwa-html-heritrix-01
+  name: process-nlwa-html-01
 spec:
   template:
     metadata:
       labels:
-        app: process-nlwa-html-heritrix
+        app: process-nlwa-html
     spec:
       restartPolicy: Never
       containers:
       - name: main-01
-        image: registry.nb.no:5000/sprakbanken/nlwa_index_html:heritrix_ordered_paths7
+        image: harbor.nb.no/sprakbanken/nlwa_index_html:2023_02_02_1
         command: ["python3", "process-warc-html.py", "jobs/x-01.csv"]
         env:
           - name: POSTGRES_USER
             value: "admin"
           - name: POSTGRES_DB
-            value: "nlwa_index_heritrix"
+            value: "nlwa_index"
           - name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -28,9 +28,9 @@ spec:
           - name: POSTGRES_PORT
             value: "5432"
         volumeMounts:
-          - name: sprakbank-fs01
+          - name: sprakbank-fs00
             mountPath: /mnt/data
       volumes:
-        - name: sprakbank-fs01
+        - name: sprakbank-fs00
           persistentVolumeClaim:
-            claimName: sprakbank-fs01-ro-pvc
+            claimName: sprakbank-fs00-ro-pvc

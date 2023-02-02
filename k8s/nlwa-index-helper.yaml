@@ -10,7 +10,7 @@ spec:
         - name: POSTGRES_USER
           value: "admin"
         - name: POSTGRES_DB
-          value: "nlwa_index_heritrix"
+          value: "nlwa_index"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -23,9 +23,9 @@ spec:
       command: [ "/bin/sh" ]
       args: [ "-c", "sleep infinity"]
       volumeMounts:
-        - name: sprakbank-fs01
+        - name: sprakbank-fs00
           mountPath: /mnt/data
   volumes:
-    - name: sprakbank-fs01
+    - name: sprakbank-fs00
       persistentVolumeClaim:
-        claimName: sprakbank-fs01-ro-pvc
+        claimName: sprakbank-fs00-ro-pvc

@@ -28,8 +28,8 @@ cat db/schema.sql | k exec -i sprakbank-postgres-POD -- psql -U admin -d nlwa_in
 ## build helper for accessing deduppen1
 ```bash
 cd k8s
-docker build -t registry.nb.no:5000/sprakbanken/nlwa_index_helper .
-docker push registry.nb.no:5000/sprakbanken/nlwa_index_helper
+docker build -t harbor.nb.no/sprakbanken/nlwa_index_helper .
+docker push harbor.nb.no/sprakbanken/nlwa_index_helper
 kubectl apply -f nlwa-index-helper.yaml
 ```
 
@@ -46,11 +46,13 @@ cat crawls.csv | k exec -i nlwa-index-helper -- python3 create_partitions.py
 ## create batches (10) for the files
 ```bash
 mkdir crawls && cp crawls.csv crawls && cd crawls
-split -d -n l/10 --numeric-suffixes=1 --additional-suffix=.csv files_left.csv x-
+split -d -n l/10 --numeric-suffixes=1 --additional-suffix=.csv crawls.csv x-
+cd ..
 ```
 
 ## create jobs based on template in jobs/
 ```bash
+mkdir jobs
 for i in `seq -f "%02g" 1 10`
 do
   cat job-template.yaml | sed "s/-01/-$i/" > jobs/job-$i.yaml
@@ -60,8 +62,8 @@ done
 ## build docker image for WARC processing
 ```bash
 cd ..
-docker build -t registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
-docker push registry.nb.no:5000/sprakbanken/nlwa_index_html:2022-07-08-1
+docker build -t harbor.nb.no/sprakbanken/nlwa_index_html .
+docker push harbor.nb.no/sprakbanken/nlwa_index_html
 ```
 
 ## start processing

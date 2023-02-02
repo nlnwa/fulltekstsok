@@ -13,7 +13,7 @@ RUN rm /usr/local/lib/python3.8/dist-packages/justext/stoplists/*
 COPY models/stoplists_justext/* /usr/local/lib/python3.8/dist-packages/justext/stoplists/
 
 # copy crawl info
-COPY k8s/crawls_heritrix jobs/
+COPY k8s/crawls jobs/
 
 # copy processing scripts
 COPY config_docker.py config.py
