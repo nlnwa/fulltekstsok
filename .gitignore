@@ -1,5 +1,10 @@
 __pycache__/*
-config.py
-k8s/jobs
-k8s/crawls
-k8s/crawls.csv
+
+# IntelliJ IDEA
+.idea
+
+# environment files
+.env
+
+# Python virtual environment
+venv/

@@ -1,17 +1,24 @@
-# set base image (host OS)
-FROM python:3.10-slim
+FROM python:3.11-slim-bullseye
 
-# set the working directory in the container
-WORKDIR /code
+RUN useradd -ms /bin/bash app
+USER app
 
-# copy requirements
-COPY requirements.txt /code
+WORKDIR /home/app
 
-# install dependencies
-RUN pip install -r requirements.txt
+# Setup virtual environment
+ENV VIRTUAL_ENV=/home/app/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN python3 -m venv $VIRTUAL_ENV
+
+# Install python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install --use-pep517 -r requirements.txt
 
 # copy working files to the working directory
-COPY . /code
+COPY app.py config.py ./
 
-# command to run on container start
-CMD streamlit run app.py --server.port 8501
+ENV STREAMLIT_SERVER_PORT="8501"
+ENV STREAMLIT_SERVER_BASE_URL_PATH="/"
+ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS="false"
+
+CMD ["streamlit", "run", "app.py"]

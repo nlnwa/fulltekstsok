@@ -1,0 +1,5 @@
+faust-cchardet==2.1.18
+justext==3.0.0
+psycopg2-binary==2.9.5
+six==1.16.0
+warcio==1.7.4

@@ -1,5 +1,0 @@
-database='nlwa_index'
-host=''
-port=5432
-user=''
-password=''

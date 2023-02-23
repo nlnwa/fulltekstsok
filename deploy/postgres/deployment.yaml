@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fts-postgres
+  labels:
+    app.kubernetes.io/name: fts-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fts-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fts-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15.2-bullseye
+        envFrom:
+          - secretRef:
+              name: postgres-env
+        ports:
+        - containerPort: 5432
+          name: client
+          protocol: TCP
+        volumeMounts:
+          - name: data
+            mountPath: /var/lib/postgresql/data
+          - name: dshm
+            mountPath: /dev/shm
+          - name: init
+            mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+        - name: data
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                accessModes:
+                  - ReadWriteOnce
+                storageClassName: "standard"
+                resources:
+                  requests:
+                    storage: 500Mi
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+
