@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: ghcr.io/nlnwa/fts-webapp
+        image: ghcr.io/nlnwa/fulltekstsok-webapp:main
         imagePullPolicy: IfNotPresent
         envFrom:
           - configMapRef:

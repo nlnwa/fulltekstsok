@@ -12,7 +12,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: indexer
-        image: ghcr.io/nlnwa/fts-indexer:latest
+        image: ghcr.io/nlnwa/fulltekstsok-indexer:main
         imagePullPolicy: IfNotPresent
         args: ["/mnt/data"]
         envFrom:
