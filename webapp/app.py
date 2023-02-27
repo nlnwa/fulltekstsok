@@ -56,8 +56,7 @@ def get_docs_websearch(query="'Nettarkivet'", limit=10, window=25, samplesize=10
 
         # analyze temp table
         cur.execute("ANALYZE query_results_limit;")
-        
-        sql = """SELECT ts_headline('norwegian', (array_agg(fulltext))[1], websearch_to_tsquery('norwegian', %s), 'MaxFragments=1, MaxWords=%s, MinWords=5') as conc, (array_agg(substring(wf.date, 1, 10)))[1] as date, (array_agg('https://k8s.nb.no/loke/' || regexp_replace(substring(wf.date, 1, 19), '\D', '', 'g') || '/' || wf.target_uri))[1] as loke_url, (array_agg(wf.target_uri))[1] as web_url, ft.fulltext_hash
+        sql = f"""SELECT ts_headline('norwegian', (array_agg(fulltext))[1], websearch_to_tsquery('norwegian', %s), 'MaxFragments=1, MaxWords=%s, MinWords=5') as conc, (array_agg(substring(wf.date, 1, 10)))[1] as date, (array_agg('{c.wayback_url}' || regexp_replace(substring(wf.date, 1, 19), '\D', '', 'g') || '/' || wf.target_uri))[1] as loke_url, (array_agg(wf.target_uri))[1] as web_url, ft.fulltext_hash
             FROM
             warcinfo wf 
             JOIN query_results_limit ft ON ft.fulltext_hash = wf.fulltext_hash AND ft.crawl_id = wf.crawl_id

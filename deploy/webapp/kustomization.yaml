@@ -12,3 +12,4 @@ configMapGenerator:
       - STREAMLIT_SERVER_BASE_URL_PATH=""
       - STREAMLIT_LOGGER_LEVEL="info"
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS="false"
+      - WAYBACK_URL="https://localhost:8080/"
