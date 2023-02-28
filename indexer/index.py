@@ -1,18 +1,23 @@
-import datetime
+import concurrent.futures
 import hashlib
 import logging
 import os
-import re
-import sys
 import pathlib
+import re
+import signal
+import sys
+import time
 
 import cchardet
 import justext
 import psycopg2 as pg
-from psycopg2 import pool
 from warcio.archiveiterator import ArchiveIterator
 
 import config as c
+
+logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+                    level=logging.INFO,
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 # Justext options (magbb)
 MAX_LINK_DENSITY = 0.4
@@ -23,6 +28,7 @@ STOPWORDS_LOW = 0.30
 STOPWORDS_HIGH = 0.32
 NO_HEADINGS = False
 
+warcfile_check_sql = """SELECT warc_file_name FROM warc_files WHERE warc_file_name=%s;"""
 warcfile_sql = """WITH e AS (
             INSERT INTO warc_files(warc_file_name) VALUES(%s) ON CONFLICT DO NOTHING RETURNING warc_file_id
                     )
@@ -34,6 +40,11 @@ warcinfo_response_sql = """INSERT INTO warcinfo(record_id, crawl_id, type, concu
                         VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING ;"""
 warcinfo_revisit_sql = """INSERT INTO warcinfo(record_id, crawl_id, type, concurrent_to, refers_to, target_uri, date, payload_digest, content_type, content_length, response_mime_type, response_status, redirect_location, warc_file_id)
                         VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING ;"""
+crawls_sql = """WITH e AS
+            (INSERT INTO crawls VALUES(DEFAULT, %s) ON CONFLICT (name) DO UPDATE SET name = NULL WHERE FALSE RETURNING crawl_id)
+            SELECT crawl_id FROM e
+            UNION ALL
+            SELECT crawl_id FROM crawls WHERE name = %s LIMIT 1;"""
 
 
 # INSPIRED BY: https://github.com/bitextor/bitextor/blob/master/bitextor-warc2htmlwarc.py and JUSTEXT
@@ -94,6 +105,10 @@ def extract_content(file, crawl_id, conn):
     with open(file, 'rb') as stream:
         with conn:
             with conn.cursor() as cur:
+                cur.execute(warcfile_check_sql, (file,))
+                if cur.fetchone() is not None:
+                    logging.warning(f"Already indexed... skipping: {file}")
+                    return
                 cur.execute(warcfile_sql, (file, file))
                 warc_file_id = cur.fetchone()[0]
 
@@ -120,29 +135,29 @@ def extract_content(file, crawl_id, conn):
                     # we create a hash of the content stream for deduplication (see the problem in: https://github.com/webrecorder/warcio/issues/74)
                     try:
                         content_stream = record.content_stream().read()
-                    except:
-                        logging.error(f"problem reading content stream... skipping: {warc_record_id}")
+                    except Exception as e:
+                        logging.warning(f"Failed to read content stream... skipping: {file}@{warc_record_id}: {e}")
                         continue
 
                     try:
                         # decode and remove boilerplate
                         utf_stream = convert_encoding(content_stream)
                         if utf_stream is None:
-                            logging.warning(f"Could not convert encoding... skipping: {warc_record_id}")
+                            logging.warning(f"Failed to convert encoding... skipping: {file}@{warc_record_id}")
                             continue
 
                         if len(utf_stream) > 3000000:
-                            logging.warning(f"Very long document... skipping: {warc_record_id}")
+                            logging.warning(f"Very long document... skipping: {file}@{warc_record_id}")
                             continue
 
                     except Exception as e:
-                        logging.error(f"Problem loading HTML... skipping: {warc_record_id}: {e}")
+                        logging.warning(f"Problem loading HTML... skipping: {file}@{warc_record_id}: {e}")
                         continue
 
                     try:
                         html_content = remove_bp(utf_stream, stopwords)
                     except Exception as e:
-                        logging.error(f"Failed to remove boilerplate... skipping: {warc_record_id}: {e}")
+                        logging.warning(f"Failed to remove boilerplate... skipping: {file}@{warc_record_id}: {e}")
                         continue
 
                     content_hash = hashlib.sha1(content_stream).hexdigest()
@@ -166,7 +181,7 @@ def extract_content(file, crawl_id, conn):
                                     hashStr))
                     except pg.Error as e:
                         logging.error(
-                            f"Failed to save warc info for response record {warc_record_id}: {e}")
+                            f"Failed to save warc info for response record: {file}@{warc_record_id}: {e}")
 
                 elif record.rec_type == 'revisit':
                     try:
@@ -183,87 +198,109 @@ def extract_content(file, crawl_id, conn):
                                     record.rec_headers.get('Content-Length'), mime, statusline, loc, warc_file_id))
                     except pg.Error as e:
                         logging.error(
-                            f"Failed to save warc info for revisit record {warc_record_id}: {e}")
+                            f"Failed to save warc info for revisit record {file}@{warc_record_id}: {e}")
             except Exception as e:
-                logging.error(f"Error in WARC record: {file}: {e}")
-                continue
+                logging.error(f"Error processing WARC record: {file}@{warc_record_id}: {e}")
 
 
 stopwords = get_all_stop_words()
 
 
-def create_partition(conn, platform, crawl_name):
-    if not platform:
-        return None
-
-    logging.info(f"Creating new partition: {platform}_{crawl_name}")
+def create_partition(conn, partition):
+    logging.info(f"Creating partition: {partition}")
     with conn:
         with conn.cursor() as cur:
-            crawls_sql = """WITH e AS
-            (INSERT INTO crawls VALUES(DEFAULT, %s) ON CONFLICT (name) DO UPDATE SET name = NULL WHERE FALSE RETURNING crawl_id)
-            SELECT crawl_id FROM e
-            UNION ALL
-            SELECT crawl_id FROM crawls WHERE name = %s LIMIT 1;"""
-            cur.execute(crawls_sql, (crawl_name, crawl_name))
+            cur.execute(crawls_sql, (partition, partition))
             crawl_id = cur.fetchone()[0]
 
             cur.execute(
-                f'CREATE TABLE IF NOT EXISTS "warcinfo_{platform}_{crawl_name}" PARTITION OF warcinfo FOR VALUES IN (%s);',
+                f'CREATE TABLE IF NOT EXISTS "warcinfo_{partition}" PARTITION OF warcinfo FOR VALUES IN (%s);',
                 (crawl_id,))
             cur.execute(
-                f'CREATE TABLE IF NOT EXISTS "fulltext_{platform}_{crawl_name}" PARTITION OF fulltext FOR VALUES IN (%s);',
+                f'CREATE TABLE IF NOT EXISTS "fulltext_{partition}" PARTITION OF fulltext FOR VALUES IN (%s);',
                 (crawl_id,))
             return crawl_id
 
 
-if __name__ == "__main__":
-    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
-                        level=logging.INFO,
-                        datefmt='%Y-%m-%d %H:%M:%S')
+def process_file(file, crawl_id):
+    if not crawl_id:
+        logging.error(f'Cannot process "{file}" without crawl_id')
+        return
+    try:
+        conn = getconn()
+        start = time.perf_counter()
+        extract_content(file, crawl_id, conn)
+        end = time.perf_counter()
+        logging.info(f"Processed \"{file}\" in {round(end - start, 3)} seconds")
+    except Exception as error:
+        logging.error(f"Error processing: {file}: {error}")
+    finally:
+        if conn:
+            conn.close()
 
-    if len(sys.argv) == 0:
-        logging.error("Missing argument (path to warc collections)")
+
+def getconn():
+    return pg.connect(user=c.user, password=c.password, database=c.database, host=c.host, port=c.port)
+
+
+def main(platform, input_folder, max_workers):
+    path = str(pathlib.PurePath(input_folder))
+
+    start = time.perf_counter()
+    count = 0
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers) as executor:
+        logging.info(f"Using {executor._max_workers} workers")
+        signal.signal(signal.SIGTERM, lambda _: executor.shutdown(wait=True, cancel_futures=True))
+        conn = getconn()
+        results = []
+        for root, dirs, files in os.walk(path):
+            if re.findall('_screenshot|_dns', root.lower()):
+                continue
+
+            # Create partition for directories at level 1
+            if root[len(path):].count(os.sep) == 1:
+                crawl_name = pathlib.PurePath(root).name
+                try:
+                    partition = f"{platform}_{crawl_name}"
+                    crawl_id = create_partition(conn, partition)
+                except pg.Error as e:
+                    logging.error(f'Failed to get crawl id for "{partition}"... skipping: {e}')
+                    continue
+
+            if root == path:
+                # Don't process any files at path
+                continue
+
+            files = [os.path.join(root, file) for file in files if
+                     not re.findall('screenshot', file.lower()) and file.endswith(".warc.gz") and not file.endswith(
+                         "meta.warc.gz")]
+            count += len(files)
+            for file in files:
+                f = executor.submit(process_file, file, crawl_id)
+                results.append(f)
+
+        concurrent.futures.wait(results)
+        conn.close()
+
+    end = time.perf_counter()
+    logging.info(f"Processed {count} files in {round(end - start, 2)} seconds")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        logging.error("Missing argument(s). Required arguments: <platform name> <input folder>)")
         exit(1)
 
     platform = sys.argv[1]
-    if not platform:
-        logging.error("Missing platform name")
-        exit(1)
-
     input_folder = sys.argv[2]
+
     if not os.path.exists(input_folder):
         logging.error(f"Path does not exist: {input_folder}")
         exit(1)
 
-    try:
-        db = pool.SimpleConnectionPool(1, 20, user=c.user, password=c.password, database=c.database, host=c.host,
-                                       port=c.port)
-        conn = db.getconn()
-    except (Exception, pg.DatabaseError) as error:
-        logging.error(f"Failed to get database connection: {error}")
-        exit(1)
+    max_workers = None
+    if len(sys.argv) > 3:
+        max_workers = int(sys.argv[3])
 
-    path = str(pathlib.PurePath(input_folder))
-    for root, dirs, files in os.walk(path):
-        if re.findall('screenshot|dns', root.lower()):
-            continue
-
-        # Create partitions for all directories at level 1
-        if root[len(path):].count(os.sep) == 1:
-            crawl_name = pathlib.PurePath(root).name
-            crawl_id = create_partition(conn, platform, crawl_name)
-
-        for file in files:
-            if re.findall('screenshot|dns', file.lower()):
-                continue
-            if not file.endswith(".warc.gz"):
-                continue
-
-            file_path = os.path.join(root, file)
-            try:
-                start = datetime.datetime.now()
-                extract_content(file_path, crawl_id, conn)
-                duration = (datetime.datetime.now() - start).total_seconds()
-                logging.info(f"Indexed \"{file}\" in {duration} seconds")
-            except Exception as error:
-                logging.error(f"General error or error opening file: {file}: {error}")
+    main(platform, input_folder, max_workers)
