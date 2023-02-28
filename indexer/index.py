@@ -2,6 +2,7 @@ import datetime
 import hashlib
 import logging
 import os
+import re
 import sys
 import pathlib
 
@@ -191,8 +192,11 @@ def extract_content(file, crawl_id, conn):
 stopwords = get_all_stop_words()
 
 
-def create_partition(conn, crawl_name):
-    logging.info(f"Creating new partition: {crawl_name}")
+def create_partition(conn, platform, crawl_name):
+    if not platform:
+        return None
+
+    logging.info(f"Creating new partition: {platform}_{crawl_name}")
     with conn:
         with conn.cursor() as cur:
             crawls_sql = """WITH e AS
@@ -204,10 +208,10 @@ def create_partition(conn, crawl_name):
             crawl_id = cur.fetchone()[0]
 
             cur.execute(
-                f'CREATE TABLE IF NOT EXISTS "warcinfo_{crawl_name}" PARTITION OF warcinfo FOR VALUES IN (%s);',
+                f'CREATE TABLE IF NOT EXISTS "warcinfo_{platform}_{crawl_name}" PARTITION OF warcinfo FOR VALUES IN (%s);',
                 (crawl_id,))
             cur.execute(
-                f'CREATE TABLE IF NOT EXISTS "fulltext_{crawl_name}" PARTITION OF fulltext FOR VALUES IN (%s);',
+                f'CREATE TABLE IF NOT EXISTS "fulltext_{platform}_{crawl_name}" PARTITION OF fulltext FOR VALUES IN (%s);',
                 (crawl_id,))
             return crawl_id
 
@@ -221,7 +225,12 @@ if __name__ == "__main__":
         logging.error("Missing argument (path to warc collections)")
         exit(1)
 
-    input_folder = sys.argv[1]
+    platform = sys.argv[1]
+    if not platform:
+        logging.error("Missing platform name")
+        exit(1)
+
+    input_folder = sys.argv[2]
     if not os.path.exists(input_folder):
         logging.error(f"Path does not exist: {input_folder}")
         exit(1)
@@ -236,12 +245,17 @@ if __name__ == "__main__":
 
     path = str(pathlib.PurePath(input_folder))
     for root, dirs, files in os.walk(path):
+        if re.findall('screenshot|dns', root.lower()):
+            continue
+
         # Create partitions for all directories at level 1
         if root[len(path):].count(os.sep) == 1:
             crawl_name = pathlib.PurePath(root).name
-            crawl_id = create_partition(conn, crawl_name)
+            crawl_id = create_partition(conn, platform, crawl_name)
 
         for file in files:
+            if re.findall('screenshot|dns', file.lower()):
+                continue
             if not file.endswith(".warc.gz"):
                 continue
 

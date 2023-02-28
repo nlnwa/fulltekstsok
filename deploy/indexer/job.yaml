@@ -14,7 +14,7 @@ spec:
       - name: indexer
         image: ghcr.io/nlnwa/fulltekstsok-indexer:main
         imagePullPolicy: IfNotPresent
-        args: ["/mnt/data"]
+        args: ["default", "/mnt/data"]
         envFrom:
           - secretRef:
               name: postgres-env
