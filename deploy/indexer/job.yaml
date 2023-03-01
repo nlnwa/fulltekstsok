@@ -9,18 +9,20 @@ spec:
       labels:
         app.kubernetes.io/name: fts-indexer
     spec:
+      terminationGracePeriodSeconds: 180
       restartPolicy: Never
       containers:
       - name: indexer
         image: ghcr.io/nlnwa/fulltekstsok-indexer:main
         imagePullPolicy: IfNotPresent
-        args: ["default", "/mnt/data"]
+        args:
+          - "/mnt/data"
         envFrom:
           - secretRef:
               name: postgres-env
         volumeMounts:
           - name: warcs
-            mountPath: /mnt/data/default
+            mountPath: /mnt/data/
       volumes:
         - name: warcs
           persistentVolumeClaim:

@@ -7,7 +7,7 @@ import re
 import signal
 import sys
 import time
-
+import getopt
 import cchardet
 import justext
 import psycopg2 as pg
@@ -102,17 +102,17 @@ def remove_bp(utf_stream, stop_words):
 
 
 def extract_content(file, crawl_id, conn):
+    total = 0
+    count = 0
+
     with open(file, 'rb') as stream:
         with conn:
             with conn.cursor() as cur:
-                cur.execute(warcfile_check_sql, (file,))
-                if cur.fetchone() is not None:
-                    logging.warning(f"Already indexed... skipping: {file}")
-                    return
                 cur.execute(warcfile_sql, (file, file))
                 warc_file_id = cur.fetchone()[0]
 
         for record in ArchiveIterator(stream):
+            total += 1
             if record.rec_type != 'response' and record.rec_type != 'revisit':
                 continue
             if not record.http_headers:
@@ -126,6 +126,7 @@ def extract_content(file, crawl_id, conn):
             mime = record.http_headers.get('Content-Type')
             if not mime or not mime.startswith('text/html'):
                 continue
+            count += 1
 
             warc_record_id = record.rec_headers.get('WARC-Record-ID')
             loc = record.http_headers.get('Location')
@@ -201,13 +202,14 @@ def extract_content(file, crawl_id, conn):
                             f"Failed to save warc info for revisit record {file}@{warc_record_id}: {e}")
             except Exception as e:
                 logging.error(f"Error processing WARC record: {file}@{warc_record_id}: {e}")
+    return count, total
 
 
 stopwords = get_all_stop_words()
 
 
 def create_partition(conn, partition):
-    logging.info(f"Creating partition: {partition}")
+    logging.info(f"Create partition if not exists: {partition}")
     with conn:
         with conn.cursor() as cur:
             cur.execute(crawls_sql, (partition, partition))
@@ -219,88 +221,105 @@ def create_partition(conn, partition):
             cur.execute(
                 f'CREATE TABLE IF NOT EXISTS "fulltext_{partition}" PARTITION OF fulltext FOR VALUES IN (%s);',
                 (crawl_id,))
-            return crawl_id
+    return crawl_id
 
 
 def process_file(file, crawl_id):
-    if not crawl_id:
-        logging.error(f'Cannot process "{file}" without crawl_id')
-        return
+    conn = getconn()
     try:
-        conn = getconn()
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(warcfile_check_sql, (file,))
+                if cur.fetchone() is not None:
+                    logging.warning(f"Already indexed... skipping file: {file}")
+                    return
+
         start = time.perf_counter()
-        extract_content(file, crawl_id, conn)
+        count, total = extract_content(file, crawl_id, conn)
         end = time.perf_counter()
-        logging.info(f"Processed \"{file}\" in {round(end - start, 3)} seconds")
+        if count and total:
+            logging.info(f"Processed {count} of {total} records in {round(end - start, 3)} seconds: {file}")
     except Exception as error:
-        logging.error(f"Error processing: {file}: {error}")
+        logging.error(f"Error processing file {file}: {error}")
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 
 def getconn():
     return pg.connect(user=c.user, password=c.password, database=c.database, host=c.host, port=c.port)
 
 
-def main(platform, input_folder, max_workers):
-    path = str(pathlib.PurePath(input_folder))
+def main(root_dir, collection, max_workers=None):
+    """Traverse root directory and process WARC files.
+    The root directory is expected to contain only subdirectories representing crawl name.
+    Each combination of crawl name and collection will become a partition."""
 
     start = time.perf_counter()
     count = 0
 
     with concurrent.futures.ProcessPoolExecutor(max_workers) as executor:
-        logging.info(f"Using {executor._max_workers} workers")
+        logging.info(f"Using maximum {executor._max_workers} workers")
         signal.signal(signal.SIGTERM, lambda _: executor.shutdown(wait=True, cancel_futures=True))
         conn = getconn()
         results = []
-        for root, dirs, files in os.walk(path):
-            if re.findall('_screenshot|_dns', root.lower()):
-                continue
+        crawl_id = ""
+        root_dir = str(pathlib.PurePath(root_dir))
+        for curr_dir, dirs, files in os.walk(root_dir):
+            # don't decend into folders containing screenshot or dns
+            dirs[:] = [d for d in dirs if not re.findall('screenshot|dns', d.lower())]
 
             # Create partition for directories at level 1
-            if root[len(path):].count(os.sep) == 1:
-                crawl_name = pathlib.PurePath(root).name
+            if curr_dir[len(root_dir):].count(os.sep) == 1:
+                crawl_name = pathlib.PurePath(curr_dir).name
+                partition = f"{collection}_{crawl_name}"
                 try:
-                    partition = f"{platform}_{crawl_name}"
                     crawl_id = create_partition(conn, partition)
                 except pg.Error as e:
-                    logging.error(f'Failed to get crawl id for "{partition}"... skipping: {e}')
-                    continue
+                    logging.error(f'Failed to get crawl id for "{partition}"... aborting: {e}')
+                    break
 
-            if root == path:
-                # Don't process any files at path
+            if curr_dir == root_dir:
+                logging.warning(f'Skipping files in root directory: {curr_dir}')
                 continue
 
-            files = [os.path.join(root, file) for file in files if
-                     not re.findall('screenshot', file.lower()) and file.endswith(".warc.gz") and not file.endswith(
-                         "meta.warc.gz")]
+            if not crawl_id:
+                logging.warning(f'Missing crawl_id... skipping folder: {curr_dir}')
+                continue
+
+            files = [file for file in files if
+                     file.endswith(".warc.gz") and not file.endswith("meta.warc.gz")]
             count += len(files)
             for file in files:
-                f = executor.submit(process_file, file, crawl_id)
-                results.append(f)
+                results.append(executor.submit(process_file, os.path.join(curr_dir, file), crawl_id))
 
-        concurrent.futures.wait(results)
         conn.close()
+        concurrent.futures.wait(results)
 
     end = time.perf_counter()
     logging.info(f"Processed {count} files in {round(end - start, 2)} seconds")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        logging.error("Missing argument(s). Required arguments: <platform name> <input folder>)")
-        exit(1)
-
-    platform = sys.argv[1]
-    input_folder = sys.argv[2]
-
-    if not os.path.exists(input_folder):
-        logging.error(f"Path does not exist: {input_folder}")
-        exit(1)
-
+    root_dir = None
+    collection = "default"
     max_workers = None
-    if len(sys.argv) > 3:
-        max_workers = int(sys.argv[3])
 
-    main(platform, input_folder, max_workers)
+    opts, args = getopt.getopt(sys.argv[1:], "p:w",
+                               ["collection=", "max-workers="])
+    if len(args) < 1:
+        logging.error("Missing required argument: <path to directory>")
+        exit(1)
+    else:
+        root_dir = args[0]
+
+    if not os.path.isdir(root_dir):
+        logging.error(f"Path is not a directory: {root_dir}")
+        exit(1)
+
+    for opt, arg in opts:
+        if opt in ['-c', '--collection']:
+            collection = arg
+        elif opt in ['-w', '--max-workers']:
+            max_workers = int(arg)
+
+    main(root_dir=root_dir, collection=collection, max_workers=max_workers)
