@@ -304,7 +304,7 @@ if __name__ == "__main__":
     collection = "default"
     max_workers = None
 
-    opts, args = getopt.getopt(sys.argv[1:], "c:w",
+    opts, args = getopt.getopt(sys.argv[1:], "c:w:",
                                ["collection=", "max-workers="])
     if len(args) < 1:
         logging.error("Missing required argument: <path to directory>")
