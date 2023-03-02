@@ -123,13 +123,13 @@ def extract_content(file, crawl_id, conn):
             if not statusline or not statusline.startswith('200'):
                 continue
             # only content type text/html
-            mime = record.http_headers.get('Content-Type')
+            mime = record.http_headers.get('Content-Type', '')
             if not mime or not mime.startswith('text/html'):
                 continue
             count += 1
 
             warc_record_id = record.rec_headers.get('WARC-Record-ID')
-            loc = record.http_headers.get('Location')
+            loc = record.http_headers.get('Location', '')
 
             try:
                 if record.rec_type == 'response':
@@ -171,14 +171,14 @@ def extract_content(file, crawl_id, conn):
                             with conn.cursor() as cur:
                                 cur.execute(fulltext_sql, (hashStr, crawl_id, para))
                                 cur.execute(warcinfo_response_sql, (
-                                    record.rec_headers.get('WARC-Record-ID'), crawl_id,
-                                    record.rec_headers.get('WARC-Type'),
-                                    record.rec_headers.get('WARC-Concurrent-To'),
-                                    record.rec_headers.get('WARC-Target-URI'),
-                                    record.rec_headers.get('WARC-Date'), content_hash,
-                                    record.rec_headers.get('WARC-Payload-Digest'),
-                                    record.rec_headers.get('Content-Type'),
-                                    record.rec_headers.get('Content-Length'), mime, statusline, loc, warc_file_id,
+                                    record.rec_headers.get('WARC-Record-ID', ''), crawl_id,
+                                    record.rec_headers.get('WARC-Type', ''),
+                                    record.rec_headers.get('WARC-Concurrent-To', ''),
+                                    record.rec_headers.get('WARC-Target-URI', ''),
+                                    record.rec_headers.get('WARC-Date', ''), content_hash,
+                                    record.rec_headers.get('WARC-Payload-Digest', ''),
+                                    record.rec_headers.get('Content-Type', ''),
+                                    record.rec_headers.get('Content-Length', ''), mime, statusline, loc, warc_file_id,
                                     hashStr))
                     except pg.Error as e:
                         logging.error(
