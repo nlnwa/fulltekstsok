@@ -162,8 +162,10 @@ def extract_content(file, crawl_id, conn):
                         continue
 
                     content_hash = hashlib.sha1(content_stream).hexdigest()
-
                     para = "\n".join(html_content)
+                    # Postgres does not handle the NULL character (\x00), replace it with "replacement character"
+                    para = para.replace("\x00", "\uFFFD")
+
                     hashStr = hashlib.sha1(para.encode('utf-8')).hexdigest()
 
                     try:
