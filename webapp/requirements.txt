@@ -1,2 +1,2 @@
 psycopg2-binary==2.9.5
-streamlit==1.18.1
+streamlit==1.30.0
